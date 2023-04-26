@@ -1,5 +1,7 @@
 import { Notify } from 'notiflix';
+import simpleLightbox from 'simplelightbox';
 import ImgApiService from './img-api-service';
+import 'simplelightbox/dist/simple-lightbox.min.css';
 
 const refs = {
   form: document.querySelector('.search-form'),
@@ -7,15 +9,17 @@ const refs = {
   loadmoreBtn: document.querySelector('.btnLoadMore'),
 };
 
+const api = new ImgApiService();
+
 refs.form.addEventListener('submit', onFormChange);
 
 refs.loadmoreBtn.addEventListener('click', fetchImgs);
 
-const api = new ImgApiService();
-
 function onFormChange(e) {
   e.preventDefault();
+
   const currentSearch = e.currentTarget.elements.searchQuery.value;
+
   if (currentSearch !== api.query) {
     refs.gallery.innerHTML = '';
     api.resetPage();
@@ -27,50 +31,71 @@ function onFormChange(e) {
 }
 
 function fetchImgs() {
-  api.fetchImg().then(data => {
-    if (data.hits.length === 0 && api.page !== 1) {
-      refs.loadmoreBtn.classList.add('hide');
-      Notify.failure(
-        'We are sorry, but you have reached the end of search results.'
-      );
-      return;
-    }
+  api
+    .fetchImg()
+    .then(data => {
+      if (data.hits.length === 0 && api.page !== 1) {
+        hideLoadMoreBtn();
 
-    if (data.hits.length === 0) {
-      if (!refs.loadmoreBtn.classList.contains('hide')) {
-        refs.loadmoreBtn.classList.add('hide');
+        Notify.failure(
+          'We are sorry, but you have reached the end of search results.'
+        );
+
+        return;
       }
 
-      Notify.info(
-        'Sorry, there are no images matching your search query. Please try again.'
+      if (data.hits.length === 0) {
+        if (!refs.loadmoreBtn.classList.contains('hide')) {
+          hideLoadMoreBtn();
+        }
+
+        Notify.info(
+          'Sorry, there are no images matching your search query. Please try again.'
+        );
+
+        return;
+      }
+
+      showLoadMoreBtn();
+
+      if (data.hits.length === 0 && api.page !== 1) {
+        Notify.failure(
+          'We are sorry, but you have reached the end of search results.'
+        );
+
+        hideLoadMoreBtn();
+
+        return;
+      }
+      if (40 * api.page > data.totalHits && api.page !== 1) {
+        Notify.failure(
+          'We are sorry, but you have reached the end of search results.'
+        );
+
+        hideLoadMoreBtn();
+      }
+
+      if (api.page === 1) {
+        Notify.success(`Hooray! We found ${data.totalHits} images.`);
+      }
+
+      refs.gallery.insertAdjacentHTML(
+        'beforeend',
+        createCardsMarkup(data.hits)
       );
 
-      return;
-    }
+      const lightbox = new simpleLightbox('.gallery a', {
+        captionDelay: 250,
+        captionsData: 'alt',
+      });
 
-    refs.loadmoreBtn.classList.remove('hide');
+      lightbox.refresh();
 
-    if (data.hits.length === 0 && api.page !== 1) {
-      Notify.failure(
-        'We are sorry, but you have reached the end of search results.'
-      );
-      refs.loadmoreBtn.classList.add('hide');
-      return;
-    }
-    if (40 * api.page > data.totalHits && api.page !== 1) {
-      Notify.failure(
-        'We are sorry, but you have reached the end of search results.'
-      );
-      refs.loadmoreBtn.classList.add('hide');
-    }
+      api.incrementPage();
 
-    if (api.page === 1) {
-      Notify.success(`Hooray! We found ${data.totalHits} images.`);
-    }
-
-    refs.gallery.insertAdjacentHTML('beforeend', createCardsMarkup(data.hits));
-    api.incrementPage();
-  });
+      smoothScrool();
+    })
+    .catch(console.log);
 }
 
 function createCardsMarkup(cards) {
@@ -86,7 +111,7 @@ function createCardsMarkup(cards) {
         downloads,
       }) =>
         `<div class="photo-card">
-                <img src="${webformatURL}" alt="${tags}" loading="lazy"/>
+                <a href="${largeImageURL}"><img src="${webformatURL}" alt="${tags}" loading="lazy"/></a>
                 <div class="info">
                     <p class="info-item">
                         <b>Likes <br> ${likes}</b>
@@ -104,4 +129,23 @@ function createCardsMarkup(cards) {
         </div>`
     )
     .join('');
+}
+
+function showLoadMoreBtn() {
+  refs.loadmoreBtn.classList.remove('hide');
+}
+
+function hideLoadMoreBtn() {
+  refs.loadmoreBtn.classList.add('hide');
+}
+
+function smoothScrool() {
+  const { height: cardHeight } = document
+    .querySelector('.gallery')
+    .firstElementChild.getBoundingClientRect();
+
+  window.scrollBy({
+    top: cardHeight * 2,
+    behavior: 'smooth',
+  });
 }
